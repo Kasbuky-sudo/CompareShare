@@ -375,9 +375,9 @@ function renderAuth() {
 
   $('#authPaths').innerHTML = paths.length
     ? paths.map((p) => `
-        <div class="auth-path">
+        <div class="auth-path" data-path="${esc(p)}" title="点击填入下载目录：${esc(p)}">
           ${ICONS.check}
-          <span class="p" title="${esc(p)}">${esc((auth.labels && auth.labels[p]) || p)}</span>
+          <span class="p">${esc((auth.labels && auth.labels[p]) || p)}</span>
         </div>`).join('')
     : '';
 
@@ -395,9 +395,29 @@ function renderAuth() {
     capNote = `当前系统版本不支持在应用内选择目录，请在系统中授权：${MANUAL_AUTH_PATH}。`;
   }
 
+  // 收件目录本身有问题（不存在/不可写）时优先提示，这会导致收文件失败
+  const dirError = state.status.downloadDirError;
+
+  // 系统始终读不到任何授权目录、且授权接口也不可用：
+  // 多见于旧版 fnOS，此时系统不会把授权下发给应用。
+  const sysVer = auth.systemVersion || '';
+  const legacySystem = auth.available && paths.length === 0
+    && !auth.authApiAvailable && !dirError;
+
   if (!auth.available) {
     setAuthState('warn', '当前环境不支持');
     $('#authHint').textContent = auth.error || '请在飞牛桌面中打开本应用以使用目录授权。';
+  } else if (dirError) {
+    setAuthState('err', '目录不可用');
+    $('#authHint').textContent = dirError;
+    box.classList.add('err');
+  } else if (legacySystem) {
+    setAuthState('warn', '系统不支持授权');
+    $('#authHint').textContent =
+      `当前飞牛系统版本${sysVer ? `（${sysVer}）` : ''}不向第三方应用下发目录授权，`
+      + '即使已在系统设置中授权也不会生效。这是系统版本限制，需要等待飞牛更新。'
+      + '在此期间可继续使用默认收件目录，或把文件先发到该目录再移动。';
+    box.classList.add('warn');
   } else if (paths.length === 0 && auth.error) {
     setAuthState('warn', '授权查询受限');
     $('#authHint').textContent =
@@ -412,14 +432,30 @@ function renderAuth() {
     $('#authHint').textContent = `当前下载目录在授权范围内（共 ${paths.length} 个授权目录）。`;
   } else {
     setAuthState('warn', `已授权 ${paths.length} 个目录`);
-    $('#authHint').textContent = '当前下载目录不在已授权范围内，收到的文件可能无法写入。';
+    $('#authHint').textContent =
+      '当前下载目录不在已授权范围内，收到的文件可能无法写入。点击下方目录可直接填入。';
   }
 
-  // 应用内选择器不可用时，按钮改为直接打开系统应用设置，并展开分步引导
+  // 应用内选择器不可用时，主按钮改为直接打开系统应用设置；
+  // 此时隐藏同义的独立按钮与无效的分步引导，避免出现两个一样的入口
   const pickBtn = $('#btnPickDir');
   pickBtn.textContent = canPickInApp ? '选择并授权目录' : '打开系统应用设置';
   $('#btnAuthCurrent').hidden = !canPickInApp;
-  $('#authGuide').hidden = canPickInApp || paths.length > 0;
+  $('#btnOpenAppSetting').hidden = !canPickInApp;
+  $('#authGuide').hidden = canPickInApp || paths.length > 0 || legacySystem;
+
+  // 系统层面就不支持授权时，去系统设置也没有意义，直接禁用并说明
+  pickBtn.disabled = legacySystem;
+  if (legacySystem) pickBtn.title = '当前系统版本不支持应用目录授权';
+
+  // 已授权目录可点击，直接填入下载目录
+  document.querySelectorAll('#authPaths .auth-path[data-path]').forEach((el) => {
+    el.addEventListener('click', () => {
+      $('#inpDownloadDir').value = el.dataset.path;
+      toast('已填入，记得点「保存设置」', 'ok');
+      renderAuth();
+    });
+  });
 
   if (capNote && paths.length) {
     $('#authHint').textContent += ` ${capNote}`;

@@ -369,6 +369,14 @@ class Handler(BaseHTTPRequestHandler):
         state = self.state
         if path == "/api/config":
             body = self._read_json()
+            # 收件目录先校验再用：目录不存在或不可写时明确报错，
+            # 避免用户以为设置生效、收文件时才失败。
+            if "download_dir" in body:
+                err = state.settings.validate_download_dir(
+                    str(body.get("download_dir") or "")
+                )
+                if err:
+                    return self._send_json(400, {"message": err, "field": "download_dir"})
             updated = state.settings.update(body)
             if "https" in body or "port" in body:
                 state._init_identity()

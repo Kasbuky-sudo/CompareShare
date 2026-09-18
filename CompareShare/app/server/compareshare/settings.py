@@ -76,6 +76,19 @@ def accessible_paths() -> list[str]:
     return [p for p in raw.split(":") if p]
 
 
+def system_version() -> str:
+    """飞牛系统版本，例如 1.2.0604。"""
+    return os.environ.get("TRIM_SYS_VERSION", "").strip()
+
+
+def version_tuple(text: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for seg in (text or "").split("."):
+        digits = "".join(c for c in seg if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) or (0,)
+
+
 def default_download_dir() -> str:
     """默认收件目录，优先用应用自己的共享目录。"""
     shares = share_paths()
@@ -101,6 +114,7 @@ class Settings:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or (config_dir() / "config.json")
         self._data: dict[str, Any] = dict(DEFAULTS)
+        self._dir_error: str | None = None
         self.load()
 
     def load(self) -> None:
@@ -121,12 +135,23 @@ class Settings:
             self._ensure_dirs()
 
     def _ensure_dirs(self) -> None:
+        """尝试创建收件目录。
+
+        失败时记录原因而不是静默忽略：目录不存在或不可写时，
+        收文件会失败，用户需要知道是配置问题而不是传到一半丢文件。
+        """
         target = self._data.get("download_dir")
-        if target:
-            try:
-                Path(target).mkdir(parents=True, exist_ok=True)
-            except OSError:
-                pass
+        if not target:
+            self._dir_error = "未配置下载目录"
+            return
+        try:
+            Path(target).mkdir(parents=True, exist_ok=True)
+            self._dir_error = None
+        except OSError as exc:
+            self._dir_error = (
+                f"无法创建或访问下载目录 {target}：{exc.strerror or exc}。"
+                "请在设置中选择一个已授权且存在的目录。"
+            )
 
     def save(self) -> None:
         with _lock:
@@ -155,6 +180,43 @@ class Settings:
             self._ensure_dirs()
             self.save()
             return dict(self._data)
+
+    def validate_download_dir(self, target: str) -> str | None:
+        """校验收件目录可用性，返回错误说明或 None。
+
+        目录不存在且无法创建时直接报错：否则用户以为设置生效，
+        实际收文件会在最后一步失败。
+        """
+        if not target:
+            return "下载目录不能为空"
+        if not target.startswith("/"):
+            return "请填写以 / 开头的完整路径"
+        path = Path(target)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return (
+                f"目录不存在且无法创建（{exc.strerror or exc}）。"
+                "请先在飞牛文件管理器中创建该目录，或在「飞牛目录授权」中选择已有目录。"
+            )
+        if not path.is_dir():
+            return "该路径不是目录"
+        if not os.access(path, os.W_OK):
+            return (
+                "应用当前身份没有该目录的写权限。"
+                "请在「飞牛目录授权」中授权此目录后重试。"
+            )
+        try:
+            probe = path / f".compareshare-write-test-{secrets.token_hex(4)}"
+            probe.write_bytes(b"")
+            probe.unlink()
+        except OSError as exc:
+            return f"目录不可写（{exc.strerror or exc}），请检查授权。"
+        return None
+
+    def dir_error(self) -> str | None:
+        with _lock:
+            return self._dir_error
 
     def ensure_pin(self, length: int = 6) -> str:
         """返回现有 PIN，没有则生成一个（用于「需要确认」模式）。"""

@@ -373,12 +373,63 @@ class AppState:
 
     # ---- 飞牛目录授权 ------------------------------------------------
 
+    def _probe_writable_dirs(self, base: str = "/vol1", max_depth: int = 3) -> list[str]:
+        """直接探测应用身份在当前环境下实际可写的目录。
+
+        部分 fnOS 版本既不注入 TRIM_API_TOKEN，也不下发
+        TRIM_DATA_ACCESSIBLE_PATHS，此时前面两条路径都拿不到授权列表。
+        但系统授权后应用的 ACL 是实实在在生效的，因此以「能否实际写入」
+        作为兜底判据，比任何接口都更接近真相。
+
+        只做有限深度遍历（默认 3 层），并跳过隐藏目录与常见系统目录，
+        避免在大型存储池上耗时过久。
+        """
+        found: list[str] = []
+        skip = {"@appcenter", "@appconf", "@appdata", "@apphome", "@appmeta",
+                "@appshare", "@apptemp", "@#local", "docker", "lost+found"}
+
+        try:
+            level1 = sorted(Path(base).glob("*"), key=lambda p: p.name)
+        except OSError:
+            return found
+
+        def scan(directory: Path, depth: int) -> None:
+            if depth > max_depth or len(found) >= 50:
+                return
+            try:
+                children = sorted(directory.iterdir(), key=lambda p: p.name)
+            except OSError:
+                return
+            for child in children:
+                if len(found) >= 50:
+                    return
+                if not child.is_dir() or child.name.startswith("."):
+                    continue
+                if child.name in skip:
+                    continue
+                try:
+                    probe = child / f".cs-write-probe-{os.getpid()}"
+                    probe.write_bytes(b"")
+                    probe.unlink()
+                except OSError:
+                    continue
+                found.append(str(child))
+                log.info("探测到可写目录：%s", child)
+
+        for root in level1:
+            if not root.is_dir() or root.name in skip or root.name.startswith("."):
+                continue
+            scan(root, 1)
+        return found
+
     def authorized_paths(self, uid: int | None = None) -> dict[str, Any]:
         """回读官方授权目录。只认系统返回的结果，不采信前端传参。
 
         用户域与共享域分别查询：任一接口不可用（例如 scope 未生效）时，
         仍返回另一域的结果，而不是整体失败。
         """
+        from .settings import accessible_paths, system_version
+
         result: dict[str, Any] = {
             "available": self.fnos.available(),
             "user": [],
@@ -386,6 +437,8 @@ class AppState:
             "labels": {},
             "errors": [],
             "error": None,
+            "systemVersion": system_version(),
+            "authApiAvailable": False,
         }
         if not self.fnos.available():
             result["error"] = "当前环境不支持飞牛开放接口"
@@ -396,7 +449,6 @@ class AppState:
 
         # 首选来源：飞牛在用户授权后注入的 TRIM_DATA_ACCESSIBLE_PATHS。
         # 这是系统直接下发的授权结果，比走开放接口查询更可靠、无权限依赖。
-        from .settings import accessible_paths
         try:
             injected = [p for p in accessible_paths() if is_safe_path(p)]
         except Exception:  # noqa: BLE001
@@ -416,6 +468,7 @@ class AppState:
                 result["user"] = [
                     p for p in self.fnos.user_accessible_folders(uid) if is_safe_path(p)
                 ]
+                result["authApiAvailable"] = True
             except Exception as exc:  # noqa: BLE001 - 单域失败不影响另一域
                 log.warning("查询用户授权目录失败：%s", exc)
                 result["errors"].append(f"用户目录：{exc}")
@@ -429,6 +482,20 @@ class AppState:
             result["errors"].append(f"共享目录：{exc}")
 
         all_paths = result["user"] + result["shared"]
+
+        # 兜底：接口与注入变量都拿不到授权列表时，直接探测实际可写目录。
+        # 部分 fnOS 版本（如 1.2.0302）不下发 TRIM_API_TOKEN，
+        # 但系统授权后的 ACL 是生效的，以实际可写性为准。
+        if not all_paths:
+            probed = self._probe_writable_dirs()
+            if probed:
+                result["user"] = probed
+                result["probed"] = True
+                result["errors"] = []
+                result["error"] = None
+                all_paths = probed
+                log.info("通过写入探测得到 %d 个可用目录", len(probed))
+
         if all_paths:
             try:
                 result["labels"] = self.fnos.convert_path(all_paths)
@@ -474,6 +541,7 @@ class AppState:
             "port": self.port,
             "webPort": self.web_port,
             "downloadDir": str(download_dir),
+            "downloadDirError": self.settings.dir_error(),
             "pinRequired": bool(self.settings.get("pin")),
             "pin": str(self.settings.get("pin") or ""),
             "autoAccept": bool(self.settings.get("auto_accept", True)),
