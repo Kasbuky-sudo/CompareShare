@@ -1,0 +1,9 @@
+#!/bin/bash
+
+### 升级后：配置与证书都保留在应用配置目录，无需重建。
+
+if [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_USERNAME}" "${TRIM_PKGETC}" "${TRIM_PKGVAR}" 2>/dev/null
+fi
+
+exit 0

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+### 卸载前：停止服务，清理运行时数据。
+### 用户收件目录里的文件不会被删除。
+
+"${TRIM_APPDEST}/cmd/main" stop >/dev/null 2>&1
+
+exit 0

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compare Share</title>
+<link rel="icon" href="images/icon_64.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M12 11.5 20 7m-8 4.5L4 7m8 4.5V20" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <strong>Compare Share</strong>
+        <span id="brandSub">局域网极速互传</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-view="devices">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="13" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><rect x="17" y="9" width="4" height="10" rx="1.2" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>附近设备</span><em id="navPeerCount">0</em>
+      </button>
+      <button class="nav-item" data-view="inbox">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 7.5 12 11l8-3.5M12 11v9" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>收件箱</span><em id="navFileCount">0</em>
+      </button>
+      <button class="nav-item" data-view="transfers">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 4v12m0 0-3-3m3 3 3-3M17 20V8m0 0 3 3m-3-3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>传输记录</span>
+      </button>
+      <button class="nav-item" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.6v2.2M12 18.2v2.2M20.4 12h-2.2M5.8 12H3.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6M17.9 17.9l-1.6-1.6M7.7 7.7 6.1 6.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>设置</span>
+      </button>
+    </nav>
+
+    <div class="status-card" id="statusCard">
+      <div class="status-row"><span class="dot" id="statusDot"></span><span id="statusText">正在连接…</span></div>
+      <dl class="status-meta">
+        <div><dt>协议</dt><dd id="metaProtocol">—</dd></div>
+        <div><dt>端口</dt><dd id="metaPort">—</dd></div>
+        <div><dt>指纹</dt><dd id="metaFingerprint" class="mono">—</dd></div>
+      </dl>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1 id="viewTitle">附近设备</h1>
+        <p id="viewSub">正在扫描局域网中支持 LocalSend 的设备</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" id="btnAnnounce" title="立即广播一次，加快设备发现">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" fill="currentColor"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.5 12.6a8.6 8.6 0 0 1 0-1.2M5.5 11.4a8.6 8.6 0 0 1 2.7-6.4M18.5 12.6a8.6 8.6 0 0 0 0-1.2M18.5 11.4a8.6 8.6 0 0 0-2.7-6.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          刷新
+        </button>
+        <button class="btn btn-primary" id="btnPickSend">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          发送文件
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- 附近设备 -->
+      <section class="view is-active" data-view="devices">
+        <div id="peerList" class="peer-grid"></div>
+        <div class="empty" id="peerEmpty">
+          <div class="empty-art">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="13" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="17" y="9" width="4" height="10" rx="1.2" stroke="currentColor" stroke-width="1.4"/></svg>
+          </div>
+          <h3>还没有发现设备</h3>
+          <p>请确保手机或电脑与 NAS 处于同一局域网，并已打开 LocalSend 等支持该协议的应用。</p>
+          <button class="btn btn-ghost" id="btnAnnounce2">立即搜索</button>
+        </div>
+      </section>
+
+      <!-- 收件箱 -->
+      <section class="view" data-view="inbox">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>已接收文件</h2>
+              <p class="muted" id="inboxPath">—</p>
+            </div>
+            <button class="btn btn-ghost" id="btnRefreshFiles">刷新</button>
+          </div>
+          <div id="fileList" class="file-list"></div>
+        </div>
+      </section>
+
+      <!-- 传输记录 -->
+      <section class="view" data-view="transfers">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>传输记录</h2>
+              <p class="muted">最近 100 条收发记录</p>
+            </div>
+            <button class="btn btn-ghost" id="btnRefreshTransfers">刷新</button>
+          </div>
+          <div id="transferList" class="transfer-list"></div>
+        </div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="view" data-view="settings">
+        <div class="panel">
+          <div class="panel-head"><div><h2>设备信息</h2><p class="muted">在其它设备的互传列表里显示的名字</p></div></div>
+          <div class="form-row">
+            <label for="inpAlias">设备名称</label>
+            <input id="inpAlias" type="text" placeholder="例如：书房 NAS">
+          </div>
+          <div class="form-row">
+            <label for="selType">设备类型</label>
+            <select id="selType">
+              <option value="server">服务器</option>
+              <option value="desktop">桌面电脑</option>
+              <option value="headless">无头设备</option>
+              <option value="mobile">移动设备</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>接收目录</h2><p class="muted">收到的文件保存位置</p></div></div>
+          <div class="form-row">
+            <label for="inpDownloadDir">下载目录</label>
+            <input id="inpDownloadDir" type="text" placeholder="/vol1/1000/音乐">
+          </div>
+
+          <div class="auth-box" id="authBox">
+            <div class="auth-head">
+              <h3>飞牛目录授权</h3>
+              <span class="auth-state" id="authState">检测中…</span>
+            </div>
+            <p class="muted auth-desc">
+              应用以独立的包用户身份运行，访问个人目录需要先在飞牛系统中授权。
+            </p>
+            <div class="auth-paths" id="authPaths"></div>
+            <ol class="auth-guide" id="authGuide" hidden>
+              <li>打开 <strong>应用中心 → 已安装</strong></li>
+              <li>找到 <strong>Compare Share</strong>，点击 <strong>应用设置</strong></li>
+              <li>进入 <strong>访问权限</strong>，点击 <strong>选择允许访问的文件夹</strong></li>
+              <li>选中要存放接收文件的目录（如 <code>/vol1/1000/音乐</code>），保存后回到本页点「刷新授权状态」</li>
+            </ol>
+            <div class="auth-actions">
+              <button class="btn btn-primary" id="btnPickDir">选择并授权目录</button>
+              <button class="btn btn-ghost" id="btnAuthCurrent">授权当前路径</button>
+              <button class="btn btn-ghost" id="btnRefreshAuth">刷新授权状态</button>
+              <button class="btn btn-ghost" id="btnOpenAppSetting">打开系统应用设置</button>
+            </div>
+            <p class="auth-hint" id="authHint"></p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>传输安全</h2><p class="muted">控制传输是否加密与是否需要确认</p></div></div>
+          <div class="switch-row">
+            <div><strong>HTTPS 加密</strong><p class="muted">使用自签证书加密传输内容，对端首次连接需确认指纹</p></div>
+            <label class="switch"><input type="checkbox" id="chkHttps"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><strong>自动接收</strong><p class="muted">关闭后，对方发送时需在本页确认</p></div>
+            <label class="switch"><input type="checkbox" id="chkAutoAccept"><span></span></label>
+          </div>
+          <div class="switch-row">
+            <div><strong>接收 PIN 码</strong><p class="muted">开启后，发送方需输入 PIN 才能传输</p></div>
+            <label class="switch"><input type="checkbox" id="chkPin"><span></span></label>
+          </div>
+          <div class="pin-row" id="pinRow" hidden>
+            <span class="pin-value mono" id="pinValue">------</span>
+            <button class="btn btn-ghost" id="btnNewPin">重新生成</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>网络</h2><p class="muted">协议监听端口与广播间隔</p></div></div>
+          <div class="form-row">
+            <label for="inpPort">协议端口</label>
+            <input id="inpPort" type="number" min="1" max="65535" placeholder="53317">
+          </div>
+          <p class="muted small">LocalSend 默认使用 53317。修改后其它设备需手动指定端口才能发现本机。</p>
+        </div>
+
+        <div class="save-bar">
+          <span id="saveHint" class="muted"></span>
+          <button class="btn btn-primary" id="btnSaveConfig">保存设置</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- 发送对话框 -->
+<div class="modal" id="sendModal" hidden>
+  <div class="modal-card">
+    <header class="modal-head">
+      <h2>发送到 <span id="sendTargetName">—</span></h2>
+      <button class="icon-btn" id="btnCloseSend" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <div class="crumb" id="browseCrumb"><span class="muted">选择一个目录</span></div>
+      <div class="browse" id="browseList"></div>
+    </div>
+    <footer class="modal-foot">
+      <span class="muted" id="sendSelection">未选择文件</span>
+      <div class="modal-foot-actions">
+        <button class="btn btn-ghost" id="btnCancelSend">取消</button>
+        <button class="btn btn-primary" id="btnConfirmSend" disabled>开始发送</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

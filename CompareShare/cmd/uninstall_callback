@@ -1,0 +1,8 @@
+#!/bin/bash
+
+### 卸载后：只清理运行时残留。
+### 证书保存在应用配置目录（@appconf），重装后设备指纹不变，对端无需重新信任。
+
+rm -f "${TRIM_PKGVAR}/app.pid" 2>/dev/null
+
+exit 0

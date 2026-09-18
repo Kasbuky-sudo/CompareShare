@@ -1,0 +1,9 @@
+#!/bin/bash
+
+### 修改应用设置后：重启服务使配置生效。
+
+"${TRIM_APPDEST}/cmd/main" stop >/dev/null 2>&1
+sleep 1
+"${TRIM_APPDEST}/cmd/main" start >/dev/null 2>&1
+
+exit 0

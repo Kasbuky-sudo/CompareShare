@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "CompareShare.Application": {
+            "title": "Compare Share",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "port": "11011",
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

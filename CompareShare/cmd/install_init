@@ -1,0 +1,29 @@
+#!/bin/bash
+
+### 安装前检查：本应用为纯 Python 实现，仅依赖系统 Python 3。
+### 飞牛 fnOS 基于 Debian 12，默认自带 Python 3.11。
+
+if [ ! -x /usr/bin/python3 ]; then
+    echo "未找到 /usr/bin/python3，本应用需要系统 Python 3" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+PYVER=$(/usr/bin/python3 -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))' 2>/dev/null)
+PYMAJOR=${PYVER%%.*}
+
+if [ "${PYMAJOR}" != "3" ]; then
+    echo "系统 Python 版本为 ${PYVER}，本应用需要 Python 3" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+if ! /usr/bin/python3 -c 'import http.server, ssl, socket, json, hashlib, sqlite3' 2>/dev/null; then
+    echo "系统 Python 缺少必需的标准库模块" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+if [ ! -x /usr/bin/openssl ]; then
+    echo "未找到 openssl，无法生成 HTTPS 证书" > "${TRIM_TEMP_LOGFILE}"
+    exit 1
+fi
+
+exit 0

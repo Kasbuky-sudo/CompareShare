@@ -1,0 +1,53 @@
+#!/bin/bash
+
+### 安装后：准备配置文件与收件目录。
+### 注意：目录授权由飞牛系统在用户于应用设置中授权时完成，这里只做应用自身资源准备。
+
+CONF_DIR="${TRIM_PKGETC}"
+VAR_DIR="${TRIM_PKGVAR}"
+
+mkdir -p "${CONF_DIR}" "${VAR_DIR}" 2>/dev/null
+
+# 声明式共享目录（config/resource 里的 data-share），飞牛会创建并注入 TRIM_DATA_SHARE_PATHS
+INBOX=""
+if [ -n "${TRIM_DATA_SHARE_PATHS}" ]; then
+    INBOX=$(echo "${TRIM_DATA_SHARE_PATHS}" | cut -d: -f1)
+fi
+if [ -z "${INBOX}" ]; then
+    INBOX="${VAR_DIR}/received"
+fi
+mkdir -p "${INBOX}" 2>/dev/null
+
+# 首次安装写入默认配置（不覆盖已有配置，升级时保留）
+if [ ! -f "${CONF_DIR}/config.json" ]; then
+    /usr/bin/python3 - <<PYEOF
+import json, os
+conf_dir = os.environ.get("TRIM_PKGETC", "${CONF_DIR}")
+inbox = "${INBOX}" or os.path.join(os.environ.get("TRIM_PKGVAR", "${VAR_DIR}"), "received")
+data = {
+    "alias": os.uname().nodename + " (Compare Share)",
+    "download_dir": inbox,
+    "port": 53317,
+    "web_port": 11011,
+    "https": True,
+    "pin": "",
+    "auto_accept": True,
+    "device_model": "fnOS NAS",
+    "device_type": "server",
+    "announce_interval": 30,
+    "interfaces": [],
+}
+path = os.path.join(conf_dir, "config.json")
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=False, indent=2)
+print("wrote", path)
+PYEOF
+fi
+
+# 权限交给应用用户，保证以 package 身份运行时可读写
+if [ -n "${TRIM_USERNAME}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_USERNAME}" "${CONF_DIR}" "${VAR_DIR}" 2>/dev/null
+    chown -R "${TRIM_USERNAME}:${TRIM_USERNAME}" "${INBOX}" 2>/dev/null
+fi
+
+exit 0
