@@ -4,6 +4,9 @@
 
 手机、电脑、平板装个 LocalSend 就能和 NAS 直接互传文件，**不经过云端、不需要账号、不依赖外网**。应用以飞牛原生 fpk 形式安装，一个包同时支持 x86 与 arm64。
 
+> 开发者：[LocalSend](https://github.com/localsend/localsend) 与 [Kasbuky](https://github.com/Kasbuky-sudo) ·
+> 发布者：[Kasbuky](https://github.com/Kasbuky-sudo)
+
 ## 功能
 
 - **局域网设备发现** —— 多播广播 + 网段扫描双通道。家用路由器常过滤无线到有线的多播，扫描作为兜底，确保手机总能被发现。
@@ -97,4 +100,8 @@ CompareShare/
 本项目基于 [Apache-2.0](LICENSE) 发布。
 
 LocalSend 协议由 [localsend/protocol](https://github.com/localsend/protocol) 定义，参照实现 [localsend/localsend](https://github.com/localsend/localsend) 亦为 Apache-2.0。
+
+- **开发者**：[LocalSend](https://github.com/localsend/localsend) 与 [Kasbuky](https://github.com/Kasbuky-sudo)
+- **发布者**：[Kasbuky](https://github.com/Kasbuky-sudo)
+
 本应用为独立实现，与 LocalSend 官方无隶属关系。
