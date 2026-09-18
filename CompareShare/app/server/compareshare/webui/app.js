@@ -398,11 +398,10 @@ function renderAuth() {
   // 收件目录本身有问题（不存在/不可写）时优先提示，这会导致收文件失败
   const dirError = state.status.downloadDirError;
 
-  // 系统始终读不到任何授权目录、且授权接口也不可用：
-  // 多见于旧版 fnOS，此时系统不会把授权下发给应用。
+  // 系统版本低于 1.2.0604 时不会把目录授权下发给第三方应用，
+  // 此时系统里授权也不生效，直接说明版本要求而不是让用户反复尝试。
   const sysVer = auth.systemVersion || '';
-  const legacySystem = auth.available && paths.length === 0
-    && !auth.authApiAvailable && !dirError;
+  const legacySystem = auth.available && auth.authSupported === false && !dirError;
 
   if (!auth.available) {
     setAuthState('warn', '当前环境不支持');
@@ -412,11 +411,11 @@ function renderAuth() {
     $('#authHint').textContent = dirError;
     box.classList.add('err');
   } else if (legacySystem) {
-    setAuthState('warn', '系统不支持授权');
+    setAuthState('warn', '需升级系统');
     $('#authHint').textContent =
-      `当前飞牛系统版本${sysVer ? `（${sysVer}）` : ''}不向第三方应用下发目录授权，`
-      + '即使已在系统设置中授权也不会生效。这是系统版本限制，需要等待飞牛更新。'
-      + '在此期间可继续使用默认收件目录，或把文件先发到该目录再移动。';
+      `目录授权需要飞牛系统 1.2.0604 及以上，当前为${sysVer ? ` ${sysVer}` : '较低版本'}，`
+      + '系统不会把目录授权下发给第三方应用，即使已在系统设置中授权也不会生效。'
+      + '请升级飞牛系统后再使用；在此之前可继续使用默认收件目录。';
     box.classList.add('warn');
   } else if (paths.length === 0 && auth.error) {
     setAuthState('warn', '授权查询受限');

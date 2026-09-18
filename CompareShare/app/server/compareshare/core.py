@@ -428,7 +428,7 @@ class AppState:
         用户域与共享域分别查询：任一接口不可用（例如 scope 未生效）时，
         仍返回另一域的结果，而不是整体失败。
         """
-        from .settings import accessible_paths, system_version
+        from .settings import accessible_paths, system_version, version_tuple
 
         result: dict[str, Any] = {
             "available": self.fnos.available(),
@@ -439,6 +439,8 @@ class AppState:
             "error": None,
             "systemVersion": system_version(),
             "authApiAvailable": False,
+            # 目录授权需要 fnOS 1.2.0604 及以上；更低版本不会把授权下发给应用
+            "authSupported": version_tuple(system_version()) >= (1, 2, 604),
         }
         if not self.fnos.available():
             result["error"] = "当前环境不支持飞牛开放接口"
