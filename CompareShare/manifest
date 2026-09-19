@@ -1,5 +1,5 @@
 appname               = CompareShare
-version               = 1.2.1
+version               = 1.2.2
 display_name          = Compare Share
 desc                  = 局域网极速互传。支持 LocalSend 协议，与手机、电脑、平板直接互传文件，无需云端、无需账号。内置发现服务、收发管理与目录授权。
 platform              = all
@@ -15,4 +15,4 @@ service_port          = 11011
 ctl_stop              = true
 checkport             = true
 disable_authorization_path = false
-changelog             = 修复卸载重装后用户设置被重置的问题：下载目录、设备名、PIN 等配置此前在重装后会丢失并回退到默认收件目录。现在配置会同步备份到应用共享目录，重装时自动恢复。
+changelog             = 修复保存下载目录的入口不明显：保存按钮原先在设置页最底部，改完路径容易漏点保存，导致文件仍落在旧目录。现在下载目录输入框旁有独立保存按钮，离开输入框或按回车即自动保存，点击已授权目录也会直接保存生效。

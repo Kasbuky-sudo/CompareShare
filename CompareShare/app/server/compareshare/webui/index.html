@@ -136,7 +136,11 @@
           <div class="form-row">
             <label for="inpDownloadDir">下载目录</label>
             <input id="inpDownloadDir" type="text" placeholder="/vol1/1000/音乐">
+            <button class="btn btn-primary" id="btnSaveDir">保存</button>
           </div>
+          <p class="muted small" id="dirHint">
+            修改后请点「保存」；也可从下方已授权的目录中点击填入。
+          </p>
 
           <div class="auth-box" id="authBox">
             <div class="auth-head">
@@ -213,7 +217,7 @@
 
         <div class="save-bar">
           <span id="saveHint" class="muted"></span>
-          <button class="btn btn-primary" id="btnSaveConfig">保存设置</button>
+          <button class="btn btn-primary" id="btnSaveConfig">保存其它设置</button>
         </div>
       </section>
     </div>

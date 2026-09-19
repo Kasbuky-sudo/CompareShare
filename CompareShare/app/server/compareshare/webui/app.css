@@ -238,6 +238,9 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
   outline: none; border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface);
 }
+/* 输入框旁的即时保存按钮 */
+.form-row .btn { flex: 0 0 auto; }
+.warn-text { color: var(--danger) !important; }
 
 .switch-row {
   display: flex; align-items: center; justify-content: space-between;

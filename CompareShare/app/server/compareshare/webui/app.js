@@ -321,11 +321,54 @@ async function loadConfig() {
   fillSettings();
 }
 
+/* 只保存下载目录。改完立刻生效，不必翻到页面底部找保存按钮。 */
+async function saveDownloadDir() {
+  const path = $('#inpDownloadDir').value.trim();
+  const btn = $('#btnSaveDir');
+  const hint = $('#dirHint');
+
+  if (!path) {
+    hint.textContent = '下载目录不能为空。';
+    hint.classList.add('warn-text');
+    toast('请先填写下载目录', 'err');
+    return;
+  }
+  // 与已保存值相同则不重复提交
+  if (path === (state.config.download_dir || '')) {
+    hint.textContent = '当前已保存为此目录。';
+    hint.classList.remove('warn-text');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  try {
+    const { config } = await api('/api/config', {
+      method: 'POST', body: JSON.stringify({ download_dir: path }) });
+    state.config = config;
+    const saved = config.download_dir;
+    hint.textContent = `已保存：${saved}`;
+    hint.classList.remove('warn-text');
+    toast(`收件目录已改为 ${saved}`, 'ok');
+    await loadStatus();
+    renderAuth();
+  } catch (err) {
+    // 服务端会说明具体原因（目录不存在、不可写、未授权等）
+    hint.textContent = err.message;
+    hint.classList.add('warn-text');
+    toast(err.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存';
+  }
+}
+
 async function saveConfig() {
+  // 下载目录由「接收目录」面板的保存按钮单独提交，
+  // 这里不带上它，避免两处入口互相覆盖。
   const patch = {
     alias: $('#inpAlias').value.trim(),
     device_type: $('#selType').value,
-    download_dir: $('#inpDownloadDir').value.trim(),
     port: parseInt($('#inpPort').value, 10) || 53317,
     https: $('#chkHttps').checked,
     auto_accept: $('#chkAutoAccept').checked,
@@ -468,24 +511,24 @@ function renderAuth() {
       '当前下载目录不在已授权范围内，收到的文件可能无法写入。点击下方目录可直接填入。';
   }
 
-  // 应用内选择器不可用时，主按钮改为直接打开系统应用设置；
-  // 此时隐藏同义的独立按钮与无效的分步引导，避免出现两个一样的入口
+  // 按钮形态由「能否在应用内选择目录」统一决定：
+  //   能选  → 主按钮「选择并授权目录」，并保留「打开系统应用设置」作为备选
+  //   不能选 → 主按钮「打开系统应用设置」，隐藏其余同义入口，避免出现两个一样的按钮
   const pickBtn = $('#btnPickDir');
-  pickBtn.textContent = canPickInApp ? '选择并授权目录' : '打开系统应用设置';
-  $('#btnAuthCurrent').hidden = !canPickInApp;
-  $('#btnOpenAppSetting').hidden = !canPickInApp;
-  $('#authGuide').hidden = canPickInApp || paths.length > 0 || legacySystem;
-
-  // 系统层面就不支持授权时，去系统设置也没有意义，直接禁用并说明
+  const canAuthorize = canPickInApp && !legacySystem;
+  pickBtn.textContent = canAuthorize ? '选择并授权目录' : '打开系统应用设置';
   pickBtn.disabled = legacySystem;
-  if (legacySystem) pickBtn.title = '当前系统版本不支持应用目录授权';
+  pickBtn.title = legacySystem ? '当前系统版本不支持应用目录授权' : '';
+  $('#btnAuthCurrent').hidden = !canAuthorize;
+  $('#btnOpenAppSetting').hidden = !canAuthorize;
+  $('#authGuide').hidden = canAuthorize || paths.length > 0 || legacySystem;
 
-  // 已授权目录可点击，直接填入下载目录
+  // 已授权目录可点击，直接填入并保存
   document.querySelectorAll('#authPaths .auth-path[data-path]').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', async () => {
       $('#inpDownloadDir').value = el.dataset.path;
-      toast('已填入，记得点「保存设置」', 'ok');
       renderAuth();
+      await saveDownloadDir();
     });
   });
 
@@ -826,7 +869,14 @@ function bindEvents() {
   });
 
   $('#btnSaveConfig').addEventListener('click', saveConfig);
-  $('#inpDownloadDir').addEventListener('change', renderAuth);
+  $('#btnSaveDir').addEventListener('click', saveDownloadDir);
+
+  // 输入框失焦时若内容有变，自动保存；回车也可保存。
+  // 这样即使用户没注意到按钮，改完离开输入框就已生效。
+  $('#inpDownloadDir').addEventListener('change', saveDownloadDir);
+  $('#inpDownloadDir').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveDownloadDir(); }
+  });
 
   $('#chkWebUpload').addEventListener('change', (e) => {
     renderUpload();
