@@ -250,14 +250,45 @@ def step_index(gh: GitHub, version: str, data: bytes, sha: str,
         print("      根 README 无需改动")
 
 
+# 面向用户的应用说明只需这些章节；其余（目录结构、从源码构建、实现要点）
+# 属于开发者内容，不该出现在应用商店的详情页里。
+USER_SECTIONS = ("功能", "安装", "浏览器上传", "目录授权", "许可", "端口", "链接")
+
+
+def build_app_readme() -> str:
+    """从本地 README 提取面向用户的章节，作为 FnDepot 应用说明。
+
+    直接整篇搬运会把「目录结构」「从源码构建」等开发者内容带到应用详情页，
+    因此按二级标题切分后只保留用户向章节。
+    """
+    src = os.path.join(REPO, "README.md")
+    text = open(src, encoding="utf-8").read()
+
+    parts = re.split(r"^(## .+)$", text, flags=re.M)
+    head = parts[0].rstrip()
+    body: list[str] = []
+
+    for i in range(1, len(parts), 2):
+        title = parts[i]
+        content = parts[i + 1] if i + 1 < len(parts) else ""
+        name = title.lstrip("#").strip()
+        if any(name == s or name.startswith(s) for s in USER_SECTIONS):
+            chunk = title + content.rstrip()
+            if name.startswith("许可"):
+                # 署名已在页面开头给出，此处只保留许可与免责说明
+                chunk = title + "\n\n本项目基于 [Apache-2.0](LICENSE) 发布。\n" \
+                                "本应用为独立实现，与 LocalSend 官方无隶属关系。"
+            body.append(chunk)
+
+    return head + "\n\n" + "\n\n".join(body) + "\n"
+
+
 def step_app_readme(gh: GitHub) -> None:
     print("[7/8] 同步应用说明到 FnDepot")
-    src = os.path.join(REPO, "README.md")
-    if not os.path.exists(src):
+    if not os.path.exists(os.path.join(REPO, "README.md")):
         print("      跳过（本地无 README）")
         return
-    # 应用说明用精简版：取本地 README 主要章节，避免过长
-    txt = open(src, encoding="utf-8").read()
+    txt = build_app_readme()
     cur, sha = gh.get_text(FD_REPO, "CompareShare/README.md")
     if txt == cur:
         print("      已是最新")
