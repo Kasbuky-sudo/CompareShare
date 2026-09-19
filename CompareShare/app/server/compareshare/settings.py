@@ -22,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
     "announce_interval": 30,
     "interfaces": [],
     "open_in_folder": False,
+    # 浏览器上传页：手机不装应用也能传文件
+    "web_upload": True,
 }
 
 _lock = threading.RLock()

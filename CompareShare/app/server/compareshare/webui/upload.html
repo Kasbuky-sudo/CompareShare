@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6bff">
+<title>发送文件到 NAS · Compare Share</title>
+<style>
+:root {
+  --bg: #f5f6f8; --surface: #fff; --surface-2: #fafbfc;
+  --border: #e4e7ec; --border-strong: #d3d8e0;
+  --text: #1a1d23; --text-2: #5c6470; --text-3: #8b929e;
+  --accent: #2f6bff; --accent-hover: #1f56e0; --accent-soft: #eef3ff;
+  --success: #17a673; --success-soft: #e9f8f2;
+  --warn: #d98216; --warn-soft: #fdf4e7;
+  --danger: #dc3a4b; --danger-soft: #fdeef0;
+  --radius: 14px; --radius-sm: 10px;
+  --shadow: 0 2px 8px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --surface: #1c1f24; --surface-2: #21252b;
+    --border: #2b3037; --border-strong: #3a4048;
+    --text: #e9ecf0; --text-2: #a4acb8; --text-3: #737b87;
+    --accent: #5a8bff; --accent-hover: #7099ff; --accent-soft: #1e2a44;
+    --success: #3dc394; --success-soft: #16302a;
+    --warn: #e0a04a; --warn-soft: #33281a;
+    --danger: #f0616f; --danger-soft: #382024;
+    --shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 15px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+}
+
+/* 顶部 */
+.head { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+.logo {
+  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 11px;
+  background: linear-gradient(135deg, var(--accent), #7b5cff);
+  display: grid; place-items: center; color: #fff;
+  box-shadow: 0 3px 10px rgba(47,107,255,.3);
+}
+.logo svg { width: 23px; height: 23px; }
+.head-t { min-width: 0; }
+.head-t h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.head-t p { margin: 1px 0 0; font-size: 12.5px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 选择区 */
+.drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; padding: 40px 20px; text-align: center; cursor: pointer;
+  background: var(--surface); border: 2px dashed var(--border-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.drop:active { transform: scale(.99); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop svg { width: 34px; height: 34px; color: var(--accent); margin-bottom: 6px; }
+.drop strong { font-size: 15px; font-weight: 620; }
+.drop span { font-size: 12.5px; color: var(--text-3); }
+
+/* 卡片 */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  margin-top: 14px; overflow: hidden;
+}
+.card-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 600;
+}
+.card-h em { font-style: normal; color: var(--text-3); font-weight: 500; }
+
+/* 文件列表 */
+ul { list-style: none; margin: 0; padding: 0; }
+li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+li:last-child { border-bottom: none; }
+.ico {
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center;
+}
+.ico svg { width: 17px; height: 17px; }
+.ico.ok { background: var(--success-soft); color: var(--success); }
+.ico.err { background: var(--danger-soft); color: var(--danger); }
+.meta { flex: 1; min-width: 0; }
+.nm { font-size: 14px; font-weight: 500; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.sub { font-size: 12px; color: var(--text-3); display: flex; gap: 8px; }
+.bar { height: 3px; border-radius: 3px; background: var(--border);
+  margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent);
+  border-radius: 3px; transition: width .2s; }
+.bar.ok i { background: var(--success); }
+.bar.err i { background: var(--danger); }
+
+/* PIN */
+.pin-row { padding: 14px 16px; }
+.pin-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+.pin-row p { margin: 0 0 10px; font-size: 12.5px; color: var(--text-2); }
+input[type=text], input[type=password], input[inputmode=numeric] {
+  width: 100%; padding: 12px 14px; font: inherit; font-size: 20px;
+  letter-spacing: .25em; text-align: center;
+  color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+}
+input:focus { outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+
+/* 按钮 */
+.actions { display: flex; gap: 10px; margin-top: 16px; }
+button {
+  font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  padding: 13px 18px; transition: background .15s, border-color .15s, transform .1s;
+}
+button:active:not(:disabled) { transform: scale(.985); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.primary { flex: 1; background: var(--accent); color: #fff;
+  box-shadow: 0 1px 3px rgba(47,107,255,.3); }
+.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.ghost { background: var(--surface); color: var(--text-2);
+  border-color: var(--border-strong); }
+.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+/* 状态条 */
+.status {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-top: 16px; padding: 13px 15px; border-radius: var(--radius-sm);
+  font-size: 13.5px; background: var(--accent-soft); color: var(--text);
+}
+.status.ok { background: var(--success-soft); }
+.status.warn { background: var(--warn-soft); }
+.status.err { background: var(--danger-soft); }
+.status svg { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; }
+.status.ok svg { color: var(--success); }
+.status.err svg { color: var(--danger); }
+.status.warn svg { color: var(--warn); }
+.status b { display: block; font-weight: 620; margin-bottom: 2px; }
+.status div { min-width: 0; }
+.foot { margin-top: 26px; text-align: center; font-size: 12px; color: var(--text-3); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="head">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M12 11.5 20 7m-8 4.5L4 7m8 4.5V20" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="head-t">
+      <h1 id="ttl">发送文件到 NAS</h1>
+      <p id="sub">选择文件后直接传，无需安装应用</p>
+    </div>
+  </div>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" multiple hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 16V5m0 0-4.5 4.5M12 5l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 16.5v1A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <strong>点击选择文件</strong>
+    <span>也可以把文件拖进来</span>
+  </label>
+
+  <section class="card" id="pinCard" hidden>
+    <div class="pin-row">
+      <label for="pin">需要 PIN 码</label>
+      <p>接收方启用了 PIN 校验，请输入后重试。</p>
+      <input id="pin" type="text" inputmode="numeric" autocomplete="off"
+             maxlength="6" placeholder="······">
+    </div>
+  </section>
+
+  <section class="card" id="listCard" hidden>
+    <div class="card-h"><span>待发送</span><em id="cnt"></em></div>
+    <ul id="items"></ul>
+  </section>
+
+  <div class="actions" id="actions" hidden>
+    <button class="primary" id="send">开始发送</button>
+    <button class="ghost" id="clear">清空</button>
+  </div>
+
+  <div class="status" id="status" hidden></div>
+
+  <p class="foot" id="foot">Compare Share · 局域网直传，不经过云端</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var picked = [];
+  var sending = false;
+  var sessionId = null;
+
+  function fmtSize(n) {
+    if (!n) return '0 B';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0, v = n;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return (v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)) + ' ' + u[i];
+  }
+
+  var ICON = {
+    file: '<svg viewBox="0 0 24 24" fill="none"><path d="M6 3.5h7l5 5v12H6v-17Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M13 3.5v5h5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    ok: '<svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    err: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 7v6m0 3.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5M12 7.5v.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+  };
+
+  /* ---- 界面 ---- */
+
+  function showStatus(kind, title, text) {
+    var el = $('status');
+    el.className = 'status ' + kind;
+    el.innerHTML = (kind === 'ok' ? ICON.ok : kind === 'err' ? ICON.err : ICON.info) +
+      '<div><b>' + esc(title) + '</b>' + (text ? esc(text) : '') + '</div>';
+    el.hidden = false;
+  }
+  function hideStatus() { $('status').hidden = true; }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function render() {
+    var ul = $('items');
+    ul.innerHTML = '';
+    picked.forEach(function (it, i) {
+      var li = document.createElement('li');
+      li.id = 'row' + i;
+      li.innerHTML =
+        '<div class="ico" id="ico' + i + '">' + ICON.file + '</div>' +
+        '<div class="meta">' +
+          '<div class="nm">' + esc(it.file.name) + '</div>' +
+          '<div class="sub"><span>' + fmtSize(it.file.size) + '</span>' +
+            '<span id="st' + i + '"></span></div>' +
+          '<div class="bar" id="bar' + i + '"><i></i></div>' +
+        '</div>';
+      ul.appendChild(li);
+    });
+    var total = picked.reduce(function (a, b) { return a + b.file.size; }, 0);
+    $('cnt').textContent = picked.length + ' 个文件 · ' + fmtSize(total);
+    $('listCard').hidden = picked.length === 0;
+    $('actions').hidden = picked.length === 0;
+  }
+
+  function setProgress(i, frac, state, note) {
+    var bar = $('bar' + i), ico = $('ico' + i), st = $('st' + i);
+    if (bar) {
+      bar.querySelector('i').style.width = Math.round(frac * 100) + '%';
+      bar.className = 'bar' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
+    }
+    if (ico && state) {
+      ico.className = 'ico' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
+      if (state === 'ok') ico.innerHTML = ICON.ok;
+      if (state === 'err') ico.innerHTML = ICON.err;
+    }
+    if (st && note !== undefined) st.textContent = note;
+  }
+
+  /* ---- 上传 ---- */
+
+  // 浏览器在明文 HTTP 下没有 crypto.subtle（非安全上下文），
+  // 因此不计算 sha256 —— 协议允许省略该字段，服务端会跳过校验。
+  function fileDtos() {
+    var map = {};
+    picked.forEach(function (it, i) {
+      var id = String(i);
+      map[id] = {
+        id: id,
+        fileName: it.file.name,
+        size: it.file.size,
+        fileType: it.file.type || 'application/octet-stream'
+      };
+    });
+    return map;
+  }
+
+  function guessAlias() {
+    var ua = navigator.userAgent || '';
+    var os = /iPhone|iPad|iPod/i.test(ua) ? 'iPhone'
+      : /Android/i.test(ua) ? 'Android'
+      : /Macintosh/i.test(ua) ? 'Mac'
+      : /Windows/i.test(ua) ? 'Windows'
+      : /Linux/i.test(ua) ? 'Linux' : '浏览器';
+    return os + ' 浏览器';
+  }
+
+  function selfInfo() {
+    return {
+      alias: guessAlias(),
+      version: '2.2',
+      deviceModel: navigator.platform || '',
+      deviceType: 'web',
+      fingerprint: '',
+      port: Number(location.port) || 11011,
+      protocol: location.protocol.replace(':', ''),
+      download: false
+    };
+  }
+
+  function uploadOne(sid, fileId, token, file, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var q = '/api/localsend/v2/upload?sessionId=' + encodeURIComponent(sid) +
+              '&fileId=' + encodeURIComponent(fileId) +
+              '&token=' + encodeURIComponent(token);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', q, true);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      };
+      xhr.onload = function () {
+        if (xhr.status === 200) return resolve();
+        if (xhr.status === 422) return reject(new Error('校验失败，文件可能损坏'));
+        if (xhr.status === 403) return reject(new Error('传输令牌失效，请重新发送'));
+        reject(new Error('上传失败（HTTP ' + xhr.status + '）'));
+      };
+      xhr.onerror = function () { reject(new Error('网络中断，请检查与 NAS 的连接')); };
+      xhr.ontimeout = function () { reject(new Error('连接超时')); };
+      xhr.send(file);
+    });
+  }
+
+  async function send() {
+    if (sending || !picked.length) return;
+    sending = true;
+    $('send').disabled = true;
+    $('send').textContent = '发送中…';
+    $('clear').disabled = true;
+    hideStatus();
+
+    var pin = ($('pin').value || '').trim();
+    var url = '/api/localsend/v2/prepare-upload' + (pin ? '?pin=' + encodeURIComponent(pin) : '');
+
+    var prep;
+    try {
+      var res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ info: selfInfo(), files: fileDtos() })
+      });
+
+      if (res.status === 401) {
+        $('pinCard').hidden = false;
+        $('pin').focus();
+        showStatus('warn', '需要 PIN 码', '接收方启用了 PIN 校验，请输入后重试。');
+        return finish(false);
+      }
+      if (res.status === 429) {
+        showStatus('err', '尝试次数过多', 'PIN 码错误次数太多，请稍后再试。');
+        return finish(false);
+      }
+      if (res.status === 409) {
+        showStatus('warn', 'NAS 正忙', '已有其它设备正在传输，请稍后重试。');
+        return finish(false);
+      }
+      if (res.status === 403) {
+        showStatus('err', '被拒绝', '接收方拒绝了本次传输。');
+        return finish(false);
+      }
+      if (res.status === 204) {
+        showStatus('ok', '无需传输', '接收方未接受任何文件。');
+        return finish(false);
+      }
+      if (!res.ok) {
+        showStatus('err', '无法开始传输', '服务返回 HTTP ' + res.status + '。');
+        return finish(false);
+      }
+      prep = await res.json();
+      $('pinCard').hidden = true;
+    } catch (err) {
+      showStatus('err', '连接失败', '无法连接 NAS，请确认手机与 NAS 在同一网络。');
+      return finish(false);
+    }
+
+    sessionId = prep.sessionId;
+    var tokens = prep.files || {};
+    var done = 0, failed = 0;
+
+    for (var i = 0; i < picked.length; i++) {
+      var fid = String(i);
+      var token = tokens[fid];
+      if (!token) { setProgress(i, 1, 'err', '未接受'); failed++; continue; }
+
+      setProgress(i, 0, null, '发送中…');
+      try {
+        await uploadOne(sessionId, fid, token, picked[i].file, function (f) {
+          setProgress(i, f, null, Math.round(f * 100) + '%');
+        });
+        setProgress(i, 1, 'ok', '已完成');
+        done++;
+      } catch (err) {
+        setProgress(i, 1, 'err', err.message);
+        failed++;
+      }
+    }
+
+    sessionId = null;
+    if (failed === 0) {
+      showStatus('ok', '发送完成', done + ' 个文件已保存到 NAS。');
+    } else if (done > 0) {
+      showStatus('warn', '部分完成', done + ' 个成功，' + failed + ' 个失败。');
+    } else {
+      showStatus('err', '发送失败', '全部文件都未能发送，请重试。');
+    }
+    finish(true);
+  }
+
+  function finish(keepFiles) {
+    sending = false;
+    $('send').disabled = false;
+    $('send').textContent = '开始发送';
+    $('clear').disabled = false;
+    if (keepFiles) {
+      $('send').textContent = '重新发送';
+    }
+  }
+
+  function cancelSession() {
+    if (!sessionId) return;
+    var sid = sessionId;
+    sessionId = null;
+    try {
+      fetch('/api/localsend/v2/cancel?sessionId=' + encodeURIComponent(sid), { method: 'POST' });
+    } catch (e) { /* 页面正在关闭，忽略 */ }
+  }
+
+  /* ---- 事件 ---- */
+
+  function addFiles(list) {
+    Array.prototype.forEach.call(list, function (f) {
+      picked.push({ file: f });
+    });
+    render();
+    hideStatus();
+  }
+
+  $('file').addEventListener('change', function (e) {
+    addFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  var dz = $('drop');
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      e.preventDefault(); dz.classList.add('over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files.length) {
+        addFiles(e.dataTransfer.files);
+      }
+      if (ev === 'dragleave' && e.relatedTarget) return;
+      dz.classList.remove('over');
+    });
+  });
+
+  $('send').addEventListener('click', send);
+  $('clear').addEventListener('click', function () {
+    cancelSession();
+    picked = [];
+    render();
+    hideStatus();
+    $('pin').value = '';
+  });
+  $('pin').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') send();
+  });
+  window.addEventListener('pagehide', cancelSession);
+  window.addEventListener('beforeunload', cancelSession);
+
+  /* ---- 启动：确认服务端已开启网页上传 ---- */
+
+  (async function init() {
+    try {
+      var res = await fetch('/api/web-upload', { cache: 'no-store' });
+      if (!res.ok) return;
+      var info = await res.json();
+      if (info && info.alias) {
+        document.title = '发送文件到 ' + info.alias;
+        $('sub').textContent = '发送到 ' + info.alias;
+      }
+      if (info && info.enabled === false) {
+        $('drop').style.display = 'none';
+        showStatus('warn', '网页上传未开启',
+          '请在 NAS 的 Compare Share 设置中开启「浏览器上传」后刷新本页。');
+      }
+      if (info && info.pinRequired) {
+        $('pinCard').hidden = false;
+      }
+    } catch (e) { /* 查询失败不阻塞使用 */ }
+  })();
+})();
+</script>
+</body>
+</html>

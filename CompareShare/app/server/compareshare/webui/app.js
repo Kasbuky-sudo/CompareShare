@@ -271,10 +271,42 @@ function fillSettings() {
   $('#inpPort').value = c.port || 53317;
   $('#chkHttps').checked = !!c.https;
   $('#chkAutoAccept').checked = !!c.auto_accept;
+  $('#chkWebUpload').checked = c.web_upload !== false;
   const hasPin = !!(state.status.pinRequired);
   $('#chkPin').checked = hasPin;
   $('#pinRow').hidden = !hasPin;
   if (hasPin && state.status.pin) $('#pinValue').textContent = state.status.pin;
+  renderUpload();
+}
+
+/* ---------- 浏览器上传 ---------- */
+
+async function renderUpload() {
+  const on = $('#chkWebUpload').checked;
+  $('#uploadRow').hidden = !on;
+  if (!on) return;
+
+  try {
+    const info = await api('/api/web-upload');
+    const url = info.uploadUrl || '';
+    $('#uploadUrl').textContent = url || '—';
+    state.uploadUrl = url;
+
+    if (url) {
+      const box = $('#qrBox');
+      // 二维码由后端生成 SVG，避免前端再引依赖
+      box.innerHTML = '';
+      const img = document.createElement('img');
+      img.alt = '上传页二维码';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.src = `/api/qrcode.svg?host=${encodeURIComponent(
+        url.replace(/^https?:\/\//, '').split(':')[0])}`;
+      box.appendChild(img);
+    }
+  } catch (err) {
+    $('#uploadUrl').textContent = '读取失败';
+  }
 }
 
 async function loadConfig() {
@@ -297,6 +329,7 @@ async function saveConfig() {
     port: parseInt($('#inpPort').value, 10) || 53317,
     https: $('#chkHttps').checked,
     auto_accept: $('#chkAutoAccept').checked,
+    web_upload: $('#chkWebUpload').checked,
   };
   const hint = $('#saveHint');
   try {
@@ -794,6 +827,35 @@ function bindEvents() {
 
   $('#btnSaveConfig').addEventListener('click', saveConfig);
   $('#inpDownloadDir').addEventListener('change', renderAuth);
+
+  $('#chkWebUpload').addEventListener('change', (e) => {
+    renderUpload();
+    if (e.target.checked) toast('已开启浏览器上传，记得点「保存设置」', 'ok');
+    else toast('已关闭浏览器上传，记得点「保存设置」');
+  });
+
+  $('#btnCopyUrl').addEventListener('click', async () => {
+    const url = state.uploadUrl || $('#uploadUrl').textContent;
+    if (!url || url === '—') return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('地址已复制', 'ok');
+    } catch (err) {
+      // 非安全上下文没有剪贴板 API，退回手动选择
+      const el = $('#uploadUrl');
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      toast('请按 Ctrl/Cmd+C 复制选中地址');
+    }
+  });
+
+  $('#btnOpenUpload').addEventListener('click', () => {
+    const url = state.uploadUrl;
+    if (url) window.open(url, '_blank', 'noopener');
+  });
 
   $('#btnPickDir').addEventListener('click', pickAndAuthorize);
   $('#btnAuthCurrent').addEventListener('click', authorizeCurrentPath);

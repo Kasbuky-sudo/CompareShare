@@ -97,8 +97,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(200, self.state.self_info().to_json())
             if path == "/api/localsend/v2/download":
                 return self._handle_download()
+            # 二维码：手机扫码直达上传页
+            if path == "/api/qrcode.svg":
+                return self._handle_qrcode()
             if path.startswith("/api/"):
                 return self._handle_web_get(path)
+            # 浏览器上传页（手机不装应用也能传文件）
+            if path in ("/upload", "/upload/", "/upload.html"):
+                return self._serve_webui_file("upload.html")
             return self._serve_static(path)
         except ReceiveError as exc:
             return self._send_json(exc.status, {"message": exc.message})
@@ -166,6 +172,10 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _handle_prepare_upload(self) -> None:
+        # 浏览器上传页与 LocalSend 客户端共用此端点；
+        # 关闭「浏览器上传」只拦截网页来源，不影响 LocalSend 客户端。
+        if not self.state.settings.get("web_upload", True) and self._is_browser():
+            raise ReceiveError(403, "Web upload disabled")
         body = self._read_json()
         query = self._query()
         result = self.state.receiver.prepare_upload(
@@ -174,6 +184,19 @@ class Handler(BaseHTTPRequestHandler):
         if result is None:
             return self._send_empty(204)
         self._send_json(200, result)
+
+    def _is_browser(self) -> bool:
+        """区分网页上传与 LocalSend 客户端。
+
+        浏览器发起的 fetch/XHR 一定带 Origin（跨源）或 Referer（同源），
+        而 LocalSend 客户端是原生 HTTP 请求，两者都不带。
+        据此判断来源，避免误伤客户端。
+        """
+        origin = self.headers.get("Origin") or ""
+        referer = self.headers.get("Referer") or ""
+        if origin.startswith("http"):
+            return True
+        return "/upload" in referer
 
     def _handle_upload(self) -> None:
         query = self._query()
@@ -301,7 +324,126 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(200, payload)
         if path == "/api/browse":
             return self._send_json(200, self._browse(state))
+        if path == "/api/web-upload":
+            # 上传页启动时查询：是否开启、是否需要 PIN、本机地址
+            return self._send_json(200, {
+                "enabled": bool(state.settings.get("web_upload", True)),
+                "alias": state.settings.get("alias"),
+                "pinRequired": bool(state.settings.get("pin")),
+                "uploadUrl": f"http://{self._local_ip()}:{state.web_port}/upload",
+            })
         return self._send_json(404, {"message": "Not found"})
+
+    def _handle_qrcode(self) -> None:
+        """上传页的二维码（SVG），供手机扫码直达。"""
+        state = self.state
+        if not state.settings.get("web_upload", True):
+            return self._send_json(403, {"message": "Web upload disabled"})
+
+        host = self._query().get("host") or self._local_ip()
+        port = state.web_port
+        target = f"http://{host}:{port}/upload"
+
+        from .qrcode import to_svg
+        try:
+            svg = to_svg(target, "M", scale=6, border=3)
+        except ValueError as exc:
+            return self._send_json(400, {"message": str(exc)})
+
+        body = svg.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self._cors()
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def _local_ip(self) -> str:
+        """取本机在局域网中的地址，用于拼二维码里的 URL。
+
+        不能用「连接外部地址看出口」的做法：那可能选中 VPN/虚拟网卡
+        （实测某些机器会返回 tun 地址 198.18.0.1），导致二维码指向错误网段。
+        这里优先选用物理网卡的私有地址，与多播发现使用同一套接口筛选逻辑。
+        """
+        from .discovery import list_interfaces
+
+        candidates = [addr for _name, addr in list_interfaces()]
+
+        def score(addr: str) -> int:
+            # 私有地址优先，其次链路本地，最后其它
+            if addr.startswith("192.168.") or addr.startswith("10."):
+                return 0
+            if addr.startswith("172."):
+                try:
+                    second = int(addr.split(".")[1])
+                    if 16 <= second <= 31:
+                        return 0
+                except (ValueError, IndexError):
+                    pass
+            if addr.startswith("169.254."):
+                return 2
+            # 198.18.0.0/15 是保留的基准测试网段，常被代理/VPN 软件占用，
+            # 不可能是 NAS 的局域网地址，排到最后
+            if addr.startswith("198.18.") or addr.startswith("198.19."):
+                return 9
+            return 1
+
+        if candidates:
+            return sorted(candidates, key=score)[0]
+
+        # 退路：枚举本机地址，排除虚拟网段后取第一个私有地址
+        import socket as _socket
+        found: list[str] = []
+        try:
+            for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
+                found.append(info[4][0])
+        except OSError:
+            pass
+        found += [a for a in self._fallback_probe_addrs()]
+        found = [a for a in dict.fromkeys(found) if not a.startswith("127.")]
+        if found:
+            return sorted(found, key=score)[0]
+
+        host = self.headers.get("Host", "")
+        return host.split(":")[0] or "localhost"
+
+    def _fallback_probe_addrs(self) -> list[str]:
+        """通过 UDP connect 探测出口地址（可能不是局域网地址，仅作退路）。"""
+        import socket as _socket
+        out: list[str] = []
+        for target in (("8.8.8.8", 80), ("223.5.5.5", 80)):
+            try:
+                s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                try:
+                    s.connect(target)
+                    out.append(s.getsockname()[0])
+                finally:
+                    s.close()
+            except OSError:
+                continue
+        return out
+
+    def _serve_webui_file(self, name: str) -> None:
+        """直接返回 webui 目录下的一个文件。"""
+        target = (WEBUI_DIR / name).resolve()
+        try:
+            if not str(target).startswith(str(WEBUI_DIR.resolve())) or not target.is_file():
+                return self._send_json(404, {"message": "Not found"})
+        except OSError:
+            return self._send_json(404, {"message": "Not found"})
+
+        body = target.read_bytes()
+        ctype = "text/html; charset=utf-8" if target.suffix == ".html" else "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self._cors()
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def _browse(self, state: AppState) -> dict[str, Any]:
         """在已授权范围内浏览目录，供前端选择要发送的文件。"""

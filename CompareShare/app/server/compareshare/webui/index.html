@@ -164,6 +164,25 @@
         </div>
 
         <div class="panel">
+          <div class="panel-head"><div><h2>浏览器上传</h2><p class="muted">手机不装应用，用浏览器即可传文件</p></div></div>
+          <div class="switch-row">
+            <div><strong>开启上传页</strong><p class="muted">开启后，手机浏览器打开下方地址即可发送文件</p></div>
+            <label class="switch"><input type="checkbox" id="chkWebUpload"><span></span></label>
+          </div>
+          <div class="upload-row" id="uploadRow">
+            <div class="qr-box" id="qrBox"></div>
+            <div class="qr-side">
+              <p class="muted small">手机扫码直达，或手动输入地址：</p>
+              <code class="upload-url" id="uploadUrl">—</code>
+              <div class="qr-actions">
+                <button class="btn btn-ghost" id="btnCopyUrl">复制地址</button>
+                <button class="btn btn-ghost" id="btnOpenUpload">打开上传页</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><div><h2>传输安全</h2><p class="muted">控制传输是否加密与是否需要确认</p></div></div>
           <div class="switch-row">
             <div><strong>HTTPS 加密</strong><p class="muted">使用自签证书加密传输内容，对端首次连接需确认指纹</p></div>
