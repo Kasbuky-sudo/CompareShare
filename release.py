@@ -238,10 +238,12 @@ def step_index(gh: GitHub, version: str, data: bytes, sha: str,
     releases = list(doc["apps"]["CompareShare"]["releases"].keys())
     print(f"      fnpack.json: {st}  版本 {releases}")
 
-    # 根 README 的版本号同步（避免手写不一致）
+    # 根 README 的版本号同步（避免手写不一致）。
+    # 注意：替换后必须保证 " | " 分隔规范，否则 Markdown 表格会错位，
+    # 之前用 (\s*\|) 捕获分隔符会把空格吃掉，写成 "1.2.1|"。
     txt, rsha = gh.get_text(FD_REPO, "README.md")
-    new_readme = re.sub(r"(\| \[Compare Share\]\([^)]*\) \| )[^|]+(\s*\|)",
-                        rf"\g<1>{version}\g<2>", txt, count=1)
+    new_readme = re.sub(r"(\| \[Compare Share\]\([^)]*\) \| )\s*[^|]+?\s*(\|)",
+                        rf"\g<1>{version} \g<2>", txt, count=1)
     if new_readme != txt:
         st = gh.put_text(FD_REPO, "README.md", new_readme, rsha,
                          f"Compare Share 版本号 → {version}")
