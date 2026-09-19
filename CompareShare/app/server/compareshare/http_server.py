@@ -29,11 +29,23 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "CompareShare"
     protocol_version = "HTTP/1.1"
 
+    # 单次 socket 读写的超时。上传大文件时按块读取，块间不应长时间无数据；
+    # 若对端声明的长度大于实际发送量，靠这个超时终止等待，避免连接挂死。
+    # 取 5 分钟：足够容忍慢速网络下单个块的间隔，又能及时释放僵死连接。
+    timeout = 300
+
     # ---- 基础设施 ----------------------------------------------------
 
     @property
     def state(self) -> AppState:
         return self.server.state  # type: ignore[attr-defined]
+
+    def setup(self) -> None:
+        super().setup()
+        try:
+            self.connection.settimeout(self.timeout)
+        except OSError:
+            pass
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D102
         log.debug("%s - %s", self.address_string(), fmt % args)
@@ -205,6 +217,12 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             length = 0
 
+        # 官方客户端可能用流式 body，此时没有 Content-Length，
+        # 而是 Transfer-Encoding: chunked。这种请求体需要先解码分块格式，
+        # 否则会把分块长度标记当成文件内容写进去（校验和因此不匹配）。
+        transfer_encoding = (self.headers.get("Transfer-Encoding") or "").lower()
+        chunked = "chunked" in transfer_encoding
+
         session_id = query.get("sessionId", "")
         file_id = query.get("fileId", "")
         token = query.get("token", "")
@@ -219,6 +237,7 @@ class Handler(BaseHTTPRequestHandler):
                 body=self.rfile,
                 remote_addr=self.client_address[0],
                 content_length=length or None,
+                chunked=chunked,
             )
         finally:
             # 出错时请求体可能没读完，关闭连接避免残留数据污染后续请求

@@ -170,6 +170,7 @@ class Receiver:
         body: Any,
         remote_addr: str,
         content_length: int | None,
+        chunked: bool = False,
     ) -> None:
         with self._lock:
             session = self._session
@@ -204,16 +205,14 @@ class Receiver:
 
         try:
             with open(tmp, "wb") as fh:
-                remaining = expected
-                while remaining > 0:
-                    # 必须按剩余字节数精确读取：socket 上的 read(n) 会阻塞到凑满 n 字节
-                    chunk = body.read(min(512 * 1024, remaining))
-                    if not chunk:
-                        break
-                    fh.write(chunk)
-                    digest.update(chunk)
-                    written += len(chunk)
-                    remaining -= len(chunk)
+                if chunked:
+                    # 客户端用 Transfer-Encoding: chunked 流式上传。
+                    # BaseHTTPRequestHandler 不会自动解码分块格式，
+                    # 直接按字节读会把分块长度标记写进文件，导致内容损坏
+                    # （字节数看似正确，但校验和不匹配）。
+                    written = _read_chunked(body, fh, digest, expected)
+                else:
+                    written = _read_sized(body, fh, digest, expected)
                 fh.flush()
                 os.fsync(fh.fileno())
 
@@ -221,6 +220,10 @@ class Receiver:
                 raise ReceiveError(500, "Receiver error")
 
             if fmeta.sha256 and digest.hexdigest().lower() != fmeta.sha256.lower():
+                log.warning(
+                    "校验和不匹配：%s（期望 %s，实际 %s，收到 %d 字节）",
+                    fmeta.file_name, fmeta.sha256[:16], digest.hexdigest()[:16], written,
+                )
                 raise ReceiveError(422, "Checksum mismatch")
 
             # 保留对端给出的修改时间
@@ -281,6 +284,86 @@ def _silent_unlink(path: Path) -> None:
         path.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def _read_sized(body: Any, fh: Any, digest: Any, expected: int) -> int:
+    """按 Content-Length 精确读取。
+
+    两点必须注意：
+    1. 按剩余字节数读：socket 上的 read(n) 会阻塞到凑满 n 字节，
+       而对端发完就等响应，直接读会死锁。
+    2. 对端声明的 size 可能大于实际发送量（异常客户端或中途断流），
+       此时 read 会一直等下去。依赖 socket 超时兜底，返回已读字节数，
+       由调用方判定体积不符。
+    """
+    written = 0
+    remaining = expected
+    while remaining > 0:
+        try:
+            chunk = body.read(min(512 * 1024, remaining))
+        except (TimeoutError, OSError):
+            # 对端未按声明长度发送，停止等待，交由体积校验判定失败
+            break
+        if not chunk:
+            break
+        fh.write(chunk)
+        digest.update(chunk)
+        written += len(chunk)
+        remaining -= len(chunk)
+    return written
+
+
+def _read_chunked(body: Any, fh: Any, digest: Any, expected: int) -> int:
+    """解碼 HTTP chunked 传输编码并写入文件。
+
+    分块格式：<十六进制长度>[;扩展]CRLF<数据>CRLF … 以长度 0 的分块结束。
+    不解码会把长度标记混进文件内容（字节数可能仍与 expected 相符），
+    因此必须逐块解析后再落盘。
+    """
+    written = 0
+
+    def read_line() -> bytes:
+        line = body.readline(1024)
+        if not line:
+            raise ValueError("chunked body truncated")
+        return line.rstrip(b"\r\n")
+
+    while True:
+        header = read_line()
+        # 长度后可带扩展（;key=value），忽略之
+        size_part = header.split(b";", 1)[0].strip()
+        if not size_part:
+            continue
+        try:
+            size = int(size_part, 16)
+        except ValueError as exc:
+            raise ValueError(f"invalid chunk size: {size_part[:20]!r}") from exc
+
+        if size == 0:
+            # 末尾可能还有 trailer，读到空行为止
+            while True:
+                trailer = body.readline(1024)
+                if trailer in (b"", b"\r\n", b"\n"):
+                    break
+            break
+
+        remaining = size
+        while remaining > 0:
+            piece = body.read(min(512 * 1024, remaining))
+            if not piece:
+                raise ValueError("chunked body truncated")
+            # 超出声明大小则截断，避免写入多余数据
+            if written + len(piece) > expected:
+                piece = piece[: max(0, expected - written)]
+            if piece:
+                fh.write(piece)
+                digest.update(piece)
+                written += len(piece)
+            remaining -= len(piece)
+
+        read_line()  # 分块数据后的 CRLF
+
+    return written
 
 
 _ISO = re.compile(
