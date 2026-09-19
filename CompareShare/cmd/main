@@ -15,6 +15,17 @@ log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
 }
 
+# 应用输出重定向到 info.log，长期运行会持续增大，启动时做一次简单轮转。
+# 保留一份上一轮日志，总量控制在约 1MB 以内。
+rotate_log() {
+    [ -f "${LOG_FILE}" ] || return 0
+    local size
+    size=$(stat -c %s "${LOG_FILE}" 2>/dev/null || echo 0)
+    if [ "${size}" -gt 524288 ]; then
+        mv -f "${LOG_FILE}" "${LOG_FILE}.1" 2>/dev/null || true
+    fi
+}
+
 check_process() {
     local pid=$1
     if kill -0 "${pid}" 2>/dev/null; then
@@ -44,6 +55,7 @@ start_process() {
         return 0
     fi
 
+    rotate_log
     log_msg "Starting Compare Share ..."
 
     if [ ! -x "${PYTHON}" ]; then

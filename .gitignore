@@ -14,6 +14,10 @@ _*
 !CompareShare/
 *.tmp
 
+# 素材与参考（不进仓库）
+logo.png
+LocalSend-*.AppImage
+
 # 编辑器与系统
 .vscode/
 .idea/

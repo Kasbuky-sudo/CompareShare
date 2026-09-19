@@ -23,11 +23,19 @@ def _setup_path() -> None:
 
 
 def _configure_logging(verbose: bool) -> None:
+    """配置日志。
+
+    文件日志按大小轮转：NAS 应用长期运行，无轮转的日志会持续膨胀
+    （实测几天即达数百 KB，长期不清理会占用可观空间）。
+    """
+    from logging.handlers import RotatingFileHandler
+
     from compareshare.settings import log_file
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
     try:
-        handlers.append(logging.FileHandler(log_file(), encoding="utf-8"))
+        handlers.append(RotatingFileHandler(
+            log_file(), maxBytes=512 * 1024, backupCount=2, encoding="utf-8"))
     except OSError:
         pass
 
