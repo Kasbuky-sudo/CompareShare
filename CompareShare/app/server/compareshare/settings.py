@@ -110,6 +110,29 @@ def default_alias() -> str:
     return f"{host} (Compare Share)"
 
 
+def backup_file() -> Path:
+    """配置备份路径，放在卸载不会被清除的位置。
+
+    飞牛的「卸载 → 重装」会清空 TRIM_PKGETC 与 TRIM_PKGVAR，
+    用户的下载目录等设置会丢失。这里把配置同步备份到应用共享目录下的
+    收件目录里（@appshare/CompareShare/inbox，卸载时保留，且应用用户有写权限），
+    重装后由安装脚本恢复。
+
+    走应用自己的共享目录而非 /tmp 或数据目录，是因为只有这里同时满足
+    「卸载不清除」和「应用身份可写」两个条件。
+    文件名以点开头，文件管理器默认不显示。
+    """
+    shares = share_paths()
+    if shares:
+        target = Path(shares[0]) / ".config-backup.json"
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            return target
+        except OSError:
+            pass
+    return var_dir() / "received" / ".config-backup.json"
+
+
 class Settings:
     """线程安全的应用配置。"""
 
@@ -157,11 +180,26 @@ class Settings:
 
     def save(self) -> None:
         with _lock:
+            payload = json.dumps(self._data, ensure_ascii=False, indent=2)
             tmp = self.path.with_suffix(".json.tmp")
-            tmp.write_text(
-                json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            tmp.write_text(payload, encoding="utf-8")
             tmp.replace(self.path)
+            # 同步备份到卸载不会清除的位置，供重装后恢复
+            self._save_backup(payload)
+
+    def _save_backup(self, payload: str) -> None:
+        """把配置写到共享目录的备份文件。
+
+        失败不影响主流程：备份只是重装时的便利，不该阻塞配置保存。
+        """
+        try:
+            target = backup_file()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(".tmp")
+            tmp.write_text(payload, encoding="utf-8")
+            tmp.replace(target)
+        except OSError:
+            pass
 
     def get(self, key: str, default: Any = None) -> Any:
         with _lock:
