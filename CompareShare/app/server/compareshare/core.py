@@ -47,6 +47,7 @@ class AppState:
         )
         self.peers: dict[str, Peer] = {}
         self._replied: dict[str, float] = {}
+        self._reply_times: list[float] = []
         self.fnos = FnosOpenApi(APP_NAME)
 
         self.discovery = DiscoveryService(
@@ -127,17 +128,37 @@ class AppState:
             # 协议规定：收到广播后要用 HTTP register 回访，对方才会知道本机存在。
             # 无线网络下多播常被路由器过滤，这一步是双向发现的关键。
             if source == "multicast":
-                self._reply_announce(info, host)
+                self._reply_once(info, host, source)
 
-    def _reply_announce(self, info: DeviceInfo, host: str) -> None:
+    def reply_register(self, info: DeviceInfo, host: str) -> None:
+        """收到对方的 register 后回访，使其设备列表里出现本机。
+
+        必须节流：对方收到回访后同样会回访本机，不限速会形成
+        两端无限互相注册（实测可打满一个核心并持续占用带宽）。
+        """
+        self._reply_once(info, host, "register")
+
+    def _reply_once(self, info: DeviceInfo, host: str, source: str) -> None:
+        """向指定设备回访一次 register，同一设备在冷却期内只回访一次。"""
         if not info.port or not info.alias:
             return
+
+        # 冷却期：多播来源较宽松，register 来源更严格（互相触发的风险最高）
+        cooldown = 60.0 if source == "multicast" else 300.0
         now = time.time()
         with self.lock:
-            last = self._replied.get(host, 0.0)
-            if now - last < 60.0:  # 同一台设备一分钟内只回访一次
+            # 全局熔断：无论对端是谁，回访总频率受限。
+            # 两台设备互相回访时，仅靠"按 host 节流"仍可能持续建连，
+            # 这里额外限制每分钟的总次数（正常发现远低于此）。
+            recent = [t for t in self._reply_times if now - t < 60.0]
+            self._reply_times = recent
+            if len(recent) >= 12:
+                log.debug("回访频率已达上限，跳过 %s", host)
+                return
+            if now - self._replied.get(host, 0.0) < cooldown:
                 return
             self._replied[host] = now
+            self._reply_times.append(now)
             if len(self._replied) > 500:
                 for key in list(self._replied)[:250]:
                     self._replied.pop(key, None)
@@ -159,7 +180,8 @@ class AppState:
                 except Exception:  # noqa: BLE001 - 回访失败不影响主流程
                     continue
 
-        threading.Thread(target=_worker, daemon=True, name=f"reply-{host}").start()
+        threading.Thread(target=_worker, daemon=True,
+                         name=f"reply-{host}").start()
 
     def note_peer(self, info: DeviceInfo, host: str, source: str = "register") -> None:
         self._on_peer(info, host, source)

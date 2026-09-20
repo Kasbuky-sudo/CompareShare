@@ -1,5 +1,5 @@
 appname               = CompareShare
-version               = 1.2.4
+version               = 1.2.5
 display_name          = Compare Share
 desc                  = 局域网极速互传。支持 LocalSend 协议，与手机、电脑、平板直接互传文件，无需云端、无需账号。内置发现服务、收发管理与目录授权。
 platform              = all
@@ -15,4 +15,4 @@ service_port          = 11011
 ctl_stop              = true
 checkport             = true
 disable_authorization_path = false
-changelog             = 修复手机发送文件报 [422] Checksum mismatch 的问题：官方客户端流式上传时使用 HTTP chunked 传输编码，此前未解码分块格式，导致分块长度标记被当作文件内容写入（字节数看似正确但内容已损坏，只有校验和能发现）。现已正确解码。同时为上传连接增加读取超时，避免异常客户端导致连接挂死。
+changelog             = 修复持续占用 CPU 与带宽的问题：此前收到设备的 register 后都会立即回访，两台设备因此无限互相注册，持续建立连接（实测每 10 秒新增数十条 TIME-WAIT，单核占用 90%%以上，线程数持续增长）。现在回访带冷却期（register 来源 5 分钟、多播来源 1 分钟）并增加全局频率上限（12 次/分钟），修复后 CPU 降至 0%%、连接数归零。

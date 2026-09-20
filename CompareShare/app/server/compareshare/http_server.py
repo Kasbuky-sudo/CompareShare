@@ -158,30 +158,10 @@ class Handler(BaseHTTPRequestHandler):
         info = DeviceInfo.from_json(body)
         if info.alias:
             self.state.note_peer(info, self.client_address[0], "register")
-            # 回访：让对方也看到我（协议允许，便于双向发现）
-            self._callback_announce(info)
+            # 回访让对方也能看到本机。必须节流：
+            # 对方收到回访后同样会回访本机，若不限速两边会无限互相注册。
+            self.state.reply_register(info, self.client_address[0])
         self._send_json(200, self.state.self_info().to_register_response())
-
-    def _callback_announce(self, info: DeviceInfo) -> None:
-        """向主动注册的设备反向注册，使其设备列表里也出现本机。"""
-        if not info.port or not info.alias:
-            return
-
-        def _worker() -> None:
-            from . import sender as sender_mod
-            try:
-                client = sender_mod.PeerClient(
-                    host=self.client_address[0],
-                    port=info.port,
-                    protocol=info.protocol,
-                    self_info=self.state.self_info,
-                    fingerprint=info.fingerprint or None,
-                )
-                client.register()
-            except Exception as exc:  # noqa: BLE001 - 回访失败不影响主流程
-                log.debug("回访 %s 失败：%s", self.client_address[0], exc)
-
-        threading.Thread(target=_worker, daemon=True).start()
 
     def _handle_prepare_upload(self) -> None:
         # 浏览器上传页与 LocalSend 客户端共用此端点；
